@@ -1,7 +1,15 @@
 @prefix lv2:  <http://lv2plug.in/ns/lv2core#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ui:   <http://lv2plug.in/ns/extensions/ui#> .
 
 <urn:rafa:Looper>
     a lv2:Plugin ;
     lv2:binary <looper.so> ;
+    rdfs:seeAlso <looper.ttl> .
+
+<urn:rafa:Looper#ui>
+    a ui:X11UI ;
+    ui:binary <looper_ui.so> ;
+    lv2:optionalFeature ui:idleInterface ,
+                        ui:noUserResize ;
     rdfs:seeAlso <looper.ttl> .
