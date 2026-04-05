@@ -2,6 +2,7 @@
 @prefix doap:  <http://usefulinc.com/ns/doap#> .
 @prefix lv2:   <http://lv2plug.in/ns/lv2core#> .
 @prefix midi:  <http://lv2plug.in/ns/ext/midi#> .
+@prefix pprops: <http://lv2plug.in/ns/ext/port-props#> .
 @prefix rdf:   <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix units: <http://lv2plug.in/ns/extensions/units#> .
@@ -16,15 +17,19 @@
     lv2:optionalFeature lv2:hardRTCapable ;
 
     rdfs:label "Guitar Looper" ;
-    rdfs:comment """Guitar looper pedal controlled via MIDI notes.
+    rdfs:comment """Guitar looper pedal controlled via MIDI.
 
 States (PORT_STATE_OUT):
   0 = Idle, 1 = Recording, 2 = Playing, 3 = Overdubbing, 4 = Paused
 
-Default MIDI mapping:
-  C4 (60) — Record / Stop+Play / Overdub toggle
-  D4 (62) — Clear all
-  E4 (64) — Pause / Resume
+MIDI mode (midi_mode port):
+  0 = Note On  — triggered by note-on with velocity > 0
+  1 = CC       — triggered by CC with value > 0
+
+Default MIDI mapping (note numbers or CC numbers):
+  60 — Record / Stop+Play / Overdub toggle
+  62 — Clear all
+  64 — Pause / Resume
 """ ;
 
     lv2:port [
@@ -94,4 +99,25 @@ Default MIDI mapping:
         lv2:maximum 4 ;
         lv2:portProperty lv2:integer ;
         rdfs:comment "Current state: 0=Idle 1=Recording 2=Playing 3=Overdubbing 4=Paused" ;
+    ] , [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 8 ;
+        lv2:symbol "midi_mode" ;
+        lv2:name "MIDI Mode" ;
+        lv2:default 0 ;
+        lv2:minimum 0 ;
+        lv2:maximum 1 ;
+        lv2:portProperty lv2:integer, pprops:enumeration ;
+        lv2:scalePoint [ rdfs:label "Note On" ; rdf:value 0 ] ;
+        lv2:scalePoint [ rdfs:label "CC"      ; rdf:value 1 ] ;
+        rdfs:comment "MIDI message type: 0=Note On, 1=CC" ;
+    ] , [
+        a lv2:InputPort, lv2:ControlPort ;
+        lv2:index 9 ;
+        lv2:symbol "rec_level" ;
+        lv2:name "Rec Level" ;
+        lv2:default 1.0 ;
+        lv2:minimum 0.0 ;
+        lv2:maximum 2.0 ;
+        rdfs:comment "Input gain applied while recording and overdubbing" ;
     ] .

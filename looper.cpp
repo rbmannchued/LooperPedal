@@ -1,10 +1,14 @@
 /*
  * Guitar Looper LV2 Plugin
  *
- * MIDI control (default notes, configurable via control ports):
+ * MIDI control (default notes/CCs, configurable via control ports):
  *   C4  (60) - Record / Stop+Play / Overdub toggle
  *   D4  (62) - Clear (erase loop, return to idle)
  *   E4  (64) - Pause / Resume
+ *
+ * midi_mode selects the MIDI message type:
+ *   0 = Note On  (trigger on note-on with velocity > 0)
+ *   1 = CC       (trigger on CC value > 0; rec/clr/pause numbers become CC numbers)
  *
  * States:
  *   IDLE        -> press REC  -> RECORDING
@@ -28,6 +32,7 @@
 
 #define PLUGIN_URI   "urn:rafa:Looper"
 #define MAX_LOOP_SEC 120   /* maximum loop length in seconds */
+#define XFADE_LEN    256   /* crossfade length in samples to hide loop-boundary click */
 
 /* -------------------------------------------------------------------------
  * Port indices
@@ -36,11 +41,13 @@ typedef enum {
     PORT_AUDIO_IN    = 0,
     PORT_AUDIO_OUT   = 1,
     PORT_MIDI_IN     = 2,
-    PORT_REC_NOTE    = 3,   /* MIDI note: record / overdub toggle  */
-    PORT_CLR_NOTE    = 4,   /* MIDI note: clear loop               */
-    PORT_PAUSE_NOTE  = 5,   /* MIDI note: pause / resume           */
-    PORT_LEVEL       = 6,   /* playback level  0.0 – 2.0           */
-    PORT_STATE_OUT   = 7,   /* current state (0-4, read-only)      */
+    PORT_REC_NOTE    = 3,   /* MIDI note/CC: record / overdub toggle */
+    PORT_CLR_NOTE    = 4,   /* MIDI note/CC: clear loop              */
+    PORT_PAUSE_NOTE  = 5,   /* MIDI note/CC: pause / resume          */
+    PORT_LEVEL       = 6,   /* playback level  0.0 – 2.0             */
+    PORT_STATE_OUT   = 7,   /* current state (0-4, read-only)        */
+    PORT_MIDI_MODE   = 8,   /* 0 = Note On, 1 = CC                   */
+    PORT_REC_LEVEL   = 9,   /* recording input gain  0.0 – 2.0       */
 } PortIndex;
 
 /* -------------------------------------------------------------------------
@@ -67,6 +74,8 @@ typedef struct {
     const float*             p_pause_note;
     const float*             p_level;
     float*                   p_state_out;
+    const float*             p_midi_mode;
+    const float*             p_rec_level;
 
     /* LV2 URID */
     LV2_URID_Map* map;
@@ -88,10 +97,25 @@ typedef struct {
 /* -------------------------------------------------------------------------
  * Audio processing kernel (called in chunks between MIDI events)
  * ---------------------------------------------------------------------- */
+/* Read one sample from the loop buffer with crossfade at the boundary.
+ * When loop_pos is within the first XFADE_LEN samples, blend linearly
+ * with the mirrored position at the tail so the wraparound is click-free. */
+static inline float loop_read_xfade(Looper* self, uint32_t pos)
+{
+    float s = self->buf[pos];
+    if (self->loop_len > (uint32_t)(XFADE_LEN * 2) && pos < (uint32_t)XFADE_LEN) {
+        float alpha     = (float)pos / (float)XFADE_LEN;          /* 0 → 1 */
+        uint32_t tail   = self->loop_len - XFADE_LEN + pos;
+        s = alpha * s + (1.0f - alpha) * self->buf[tail];
+    }
+    return s;
+}
+
 static void process_audio(Looper* self, const float* in, float* out,
                            uint32_t n)
 {
-    const float level = *self->p_level;
+    const float level     = *self->p_level;
+    const float rec_level = *self->p_rec_level;
 
     for (uint32_t i = 0; i < n; i++) {
         const float x = in[i];
@@ -111,7 +135,7 @@ static void process_audio(Looper* self, const float* in, float* out,
                 self->loop_len = self->buf_size;
                 self->loop_pos = 0;
                 self->state    = STATE_PLAYING;
-                const float lo = self->buf[self->loop_pos] * level;
+                const float lo = loop_read_xfade(self, self->loop_pos) * rec_level;
                 self->loop_pos = (self->loop_pos + 1) % self->loop_len;
                 out[i] = x + lo;
             }
@@ -119,7 +143,7 @@ static void process_audio(Looper* self, const float* in, float* out,
 
         case STATE_PLAYING:
             if (self->loop_len > 0) {
-                const float lo = self->buf[self->loop_pos] * level;
+                const float lo = loop_read_xfade(self, self->loop_pos) * rec_level;
                 self->loop_pos = (self->loop_pos + 1) % self->loop_len;
                 out[i] = x + lo;
             } else {
@@ -154,8 +178,15 @@ static void process_audio(Looper* self, const float* in, float* out,
  * ---------------------------------------------------------------------- */
 static void handle_midi(Looper* self, const uint8_t* msg)
 {
-    /* Accept note-on with velocity > 0 only */
-    if ((msg[0] & 0xF0) != 0x90 || msg[2] == 0) return;
+    const int midi_mode = (int)(*self->p_midi_mode + 0.5f);
+
+    if (midi_mode == 1) {
+        /* CC mode: accept any CC message regardless of value */
+        if ((msg[0] & 0xF0) != 0xB0) return;
+    } else {
+        /* Note On mode (default): accept note-on with velocity > 0 */
+        if ((msg[0] & 0xF0) != 0x90 || msg[2] == 0) return;
+    }
 
     const int note      = (int)msg[1];
     const int rec_note  = (int)(*self->p_rec_note   + 0.5f);
@@ -241,6 +272,8 @@ static void connect_port(LV2_Handle instance, uint32_t port, void* data)
     case PORT_PAUSE_NOTE: self->p_pause_note = (const float*)data;            break;
     case PORT_LEVEL:      self->p_level      = (const float*)data;            break;
     case PORT_STATE_OUT:  self->p_state_out  = (float*)data;                  break;
+    case PORT_MIDI_MODE:  self->p_midi_mode  = (const float*)data;            break;
+    case PORT_REC_LEVEL:  self->p_rec_level  = (const float*)data;            break;
     }
 }
 
