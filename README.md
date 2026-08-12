@@ -1,8 +1,6 @@
 # LooperPedal
 
-An LV2 guitar looper pedal plugin with MIDI control.
-
-**Author:** rbmannchued — [github.com/rbmannchued](https://github.com/rbmannchued)
+An LV2 guitar looper pedal plugin with MIDI control, super simple to use.
 
 ![LooperPedal UI](img/looper-pedal-ui.png)
 
@@ -16,7 +14,7 @@ An LV2 guitar looper pedal plugin with MIDI control.
 - Configurable MIDI trigger: Note On or CC mode
 - Independent Loop Volume and Rec Level controls (0–2×)
 - State output port for host visualization
-- Lightweight X11/Cairo UI — works in Carla, Ardour, Reaper and any host with `ui:X11UI` support
+- Lightweight X11/Cairo UI — works in Carla, Ardour and any host with `ui:X11UI` support
 
 ---
 
@@ -29,19 +27,6 @@ An LV2 guitar looper pedal plugin with MIDI control.
 | **PLAYING** | Looping the recorded audio. Input is mixed in. |
 | **OVERDUBBING** | Layering new input onto the existing loop. |
 | **PAUSED** | Playback frozen. Audio passes through. |
-
-State transitions:
-
-```
-IDLE ──[rec]──► RECORDING ──[rec]──► PLAYING ──[rec]──► OVERDUBBING
-                                         │                    │
-                                      [pause]             [pause]
-                                         ▼                    ▼
-                                       PAUSED ◄──────────────┘
-any state ──[clr]──► IDLE
-```
-
----
 
 ## Controls
 
@@ -100,13 +85,3 @@ make install-user
 The bundle is installed to `~/.lv2/looper.lv2/`.
 
 ---
-
-## Plugin Info
-
-| Field | Value |
-|-------|-------|
-| URI | `urn:rafa:Looper` |
-| UI URI | `urn:rafa:Looper#ui` |
-| UI type | `ui:X11UI` |
-| Category | `lv2:UtilityPlugin` |
-| Max loop length | 120 seconds |
